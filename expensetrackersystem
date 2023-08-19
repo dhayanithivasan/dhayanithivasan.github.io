@@ -1,0 +1,244 @@
+import sqlite3
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
+
+# Function to create a new database if it doesn't exist
+def create_database():
+    conn = sqlite3.connect("expense_tracker.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            description TEXT NOT NULL,
+            amount REAL NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+# Function to add a new expense to the database
+def add_expense():
+    date = date_entry.get()
+    description = description_entry.get()
+    amount_str = amount_entry.get()
+
+    if not date or not description or not amount_str:
+        messagebox.showerror("Error", "Please fill in all the fields.")
+        return
+
+    try:
+        amount = float(amount_str)
+    except ValueError:
+        messagebox.showerror("Error", "Invalid amount. Please enter a valid number.")
+        return
+
+    add_expense_to_db(date, description, amount)
+    update_expense_list()
+    clear_entries()
+
+# Function to add a new expense to the database
+def add_expense_to_db(date, description, amount):
+    conn = sqlite3.connect("expense_tracker.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO expenses (date, description, amount) VALUES (?, ?, ?)", (date, description, amount))
+    conn.commit()
+    conn.close()
+
+# Function to view all expenses from the database
+def view_expenses():
+    conn = sqlite3.connect("expense_tracker.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM expenses")
+    expenses = cursor.fetchall()
+    conn.close()
+    return expenses
+
+# Function to update the displayed expense list
+def update_expense_list():
+    expenses = view_expenses()
+    expense_list.delete(*expense_list.get_children())
+    for expense in expenses:
+        expense_list.insert("", "end", values=(expense[0], expense[1], expense[2], expense[3]))
+
+# Function to update an existing expense
+def update_expense():
+    selected_item = expense_list.selection()
+    if selected_item:
+        expense_id = expense_list.item(selected_item)['values'][0]
+        date = date_entry.get()
+        description = description_entry.get()
+        amount_str = amount_entry.get()
+
+        if not date or not description or not amount_str:
+            messagebox.showerror("Error", "Please fill in all the fields.")
+            return
+
+        try:
+            amount = float(amount_str)
+        except ValueError:
+            messagebox.showerror("Error", "Invalid amount. Please enter a valid number.")
+            return
+
+        conn = sqlite3.connect("expense_tracker.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE expenses SET date=?, description=?, amount=? WHERE id=?",
+                       (date, description, amount, expense_id))
+        conn.commit()
+        conn.close()
+
+        update_expense_list()
+        clear_entries()
+
+# Function to calculate the total expenses
+def calculate_total_expenses():
+    conn = sqlite3.connect("expense_tracker.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(amount) FROM expenses")
+    total_expenses = cursor.fetchone()[0]
+    conn.close()
+    return total_expenses
+
+# Function to show total expenses in a messagebox
+def show_total_expenses():
+    total_expenses = calculate_total_expenses()
+    messagebox.showinfo("Total Expenses", f"Total Expenses: {total_expenses}")
+
+# Function to delete an expense from the database
+def delete_expense_from_db(expense_id):
+    conn = sqlite3.connect("expense_tracker.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
+    conn.commit()
+    conn.close()
+
+# Function to delete the selected expense through the GUI
+def delete_selected_expense():
+    selected_item = expense_list.selection()
+    if selected_item:
+        expense_id = expense_list.item(selected_item)['values'][0]
+        delete_expense_from_db(expense_id)
+        update_expense_list()
+
+# Function to clear the entry fields in the GUI
+def clear_entries():
+    date_entry.delete(0, tk.END)
+    description_entry.delete(0, tk.END)
+    amount_entry.delete(0, tk.END)
+
+# Function to view a single expense
+def view_single_expense():
+    selected_item = expense_list.selection()
+    if selected_item:
+        expense_id = expense_list.item(selected_item)['values'][0]
+        conn = sqlite3.connect("expense_tracker.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM expenses WHERE id=?", (expense_id,))
+        expense = cursor.fetchone()
+        conn.close()
+
+        if expense:
+            expense_window = tk.Toplevel(root)
+            expense_window.title("View Expense")
+            tk.Label(expense_window, text="ID:").grid(row=0, column=0)
+            tk.Label(expense_window, text="Date:").grid(row=1, column=0)
+            tk.Label(expense_window, text="Description:").grid(row=2, column=0)
+            tk.Label(expense_window, text="Amount:").grid(row=3, column=0)
+
+            tk.Label(expense_window, text=expense[0]).grid(row=0, column=1)
+            tk.Label(expense_window, text=expense[1]).grid(row=1, column=1)
+            tk.Label(expense_window, text=expense[2]).grid(row=2, column=1)
+            tk.Label(expense_window, text=expense[3]).grid(row=3, column=1)
+
+# Function to view all expenses in a new window
+def view_all_expenses():
+    expenses = view_expenses()
+    if expenses:
+        expense_window = tk.Toplevel(root)
+        expense_window.title("View All Expenses")
+
+        columns = ("ID", "Date", "Description", "Amount")
+        expense_list_all = ttk.Treeview(expense_window, columns=columns, show="headings")
+        expense_list_all.heading("ID", text="ID")
+        expense_list_all.heading("Date", text="Date")
+        expense_list_all.heading("Description", text="Description")
+        expense_list_all.heading("Amount", text="Amount")
+        expense_list_all.pack()
+
+        for expense in expenses:
+            expense_list_all.insert("", "end", values=(expense[0], expense[1], expense[2], expense[3]))
+
+    else:
+        messagebox.showinfo("No Expenses", "No expenses found.")
+
+def main():
+    create_database()
+
+    root = tk.Tk()
+    root.title("Expense Tracker Application")
+    root.geometry("800x500")
+
+    frame = ttk.Frame(root, padding=(20, 20, 20, 0))
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    # Labels
+    date_label = ttk.Label(frame, text="Date (YYYY-MM-DD):")
+    date_label.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W)
+    description_label = ttk.Label(frame, text="Description:")
+    description_label.grid(row=1, column=0, padx=10, pady=5, sticky=tk.W)
+    amount_label = ttk.Label(frame, text="Amount:")
+    amount_label.grid(row=2, column=0, padx=10, pady=5, sticky=tk.W)
+
+    # Entry fields
+    global date_entry, description_entry, amount_entry
+    date_entry = ttk.Entry(frame, width=20)
+    date_entry.grid(row=0, column=1, padx=10, pady=5, sticky=tk.W)
+    description_entry = ttk.Entry(frame, width=40)
+    description_entry.grid(row=1, column=1, columnspan=2, padx=10, pady=5, sticky=tk.W)
+    amount_entry = ttk.Entry(frame, width=20)
+    amount_entry.grid(row=2, column=1, padx=10, pady=5, sticky=tk.W)
+
+    # Buttons
+    add_button = ttk.Button(frame, text="Add Expense", command=add_expense)
+    add_button.grid(row=3, column=0, padx=10, pady=10, sticky=tk.W)
+
+    delete_button = ttk.Button(frame, text="Delete Selected", command=delete_selected_expense)
+    delete_button.grid(row=3, column=1, padx=10, pady=10, sticky=tk.W)
+
+    update_button = ttk.Button(frame, text="Update Expense", command=update_expense)
+    update_button.grid(row=3, column=2, padx=10, pady=10, sticky=tk.W)
+
+    view_button = ttk.Button(frame, text="View Expense", command=view_single_expense)
+    view_button.grid(row=4, column=0, padx=10, pady=10, sticky=tk.W)
+
+    view_button_all = ttk.Button(frame, text="View All Expenses", command=view_all_expenses)
+    view_button_all.grid(row=4, column=1, padx=10, pady=10, sticky=tk.W)
+
+    total_expenses_button = ttk.Button(frame, text="Calculate Total Expenses", command=show_total_expenses)
+    total_expenses_button.grid(row=4, column=2, padx=10, pady=10, sticky=tk.W)
+
+    # Expense List Treeview
+    columns = ("ID", "Date", "Description", "Amount")
+    global expense_list
+    expense_list = ttk.Treeview(frame, columns=columns, show="headings")
+    expense_list.heading("ID", text="ID")
+    expense_list.heading("Date", text="Date")
+    expense_list.heading("Description", text="Description")
+    expense_list.heading("Amount", text="Amount")
+    expense_list.grid(row=5, column=0, columnspan=3, padx=10, pady=10)
+
+    # Scrollbar for Expense List
+    scrollbar = ttk.Scrollbar(frame, orient="vertical", command=expense_list.yview)
+    scrollbar.grid(row=5, column=3, sticky="ns")
+    expense_list.configure(yscrollcommand=scrollbar.set)
+
+    # Update the expense list on startup
+    update_expense_list()
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
+
